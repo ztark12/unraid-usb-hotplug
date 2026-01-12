@@ -12,13 +12,13 @@ load_blacklist() {
     BLACKLIST=()
     
     if [ -f "$CONFIG_FILE" ]; then
-        while IFS= read -r line; do
+        while IFS= read -r line || [ -n "$line" ]; do
             # Skip empty lines and comments
             [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-            
+
             # Extract device ID (before any comment)
             DEVICE_ID=$(echo "$line" | awk '{print $1}')
-            
+
             # Validate format (XXXX:XXXX)
             if [[ "$DEVICE_ID" =~ ^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$ ]]; then
                 BLACKLIST+=("$DEVICE_ID")

@@ -11,38 +11,43 @@ $message = '';
 // Handle form submissions
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
-    
+
     switch ($action) {
         case 'save_blacklist':
             $content = $_POST['blacklist_content'] ?? '';
+            // Convert Windows CRLF to Unix LF line endings
+            $content = str_replace("\r\n", "\n", $content);
+            $content = str_replace("\r", "\n", $content);
+            // Ensure file ends with newline (required for bash read)
+            $content = rtrim($content, "\n") . "\n";
             $result = file_put_contents($cfg_file, $content);
-            
+
             if ($result !== false) {
                 // Restart monitor to apply changes
                 shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
                 sleep(1);
                 shell_exec("nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &");
-                $message = '<div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 3px;">✓ Blacklist saved and monitor restarted successfully!</div>';
+                $message = '<div class="message-success">✓ Blacklist saved and monitor restarted successfully!</div>';
             } else {
-                $message = '<div style="background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; padding: 10px; margin-bottom: 15px; border-radius: 3px;">✗ Failed to save blacklist. Check permissions.</div>';
+                $message = '<div class="message-error">✗ Failed to save blacklist. Check permissions.</div>';
             }
             break;
-            
+
         case 'restart_monitor':
             shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
             sleep(1);
             shell_exec("nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &");
-            $message = '<div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 3px;">✓ Monitor restarted!</div>';
+            $message = '<div class="message-success">✓ Monitor restarted!</div>';
             break;
-            
+
         case 'stop_monitor':
             shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
-            $message = '<div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 3px;">✓ Monitor stopped!</div>';
+            $message = '<div class="message-success">✓ Monitor stopped!</div>';
             break;
-            
+
         case 'clear_log':
             shell_exec("echo '' > $log_file");
-            $message = '<div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 10px; margin-bottom: 15px; border-radius: 3px;">✓ Log cleared!</div>';
+            $message = '<div class="message-success">✓ Log cleared!</div>';
             break;
     }
 }
@@ -54,18 +59,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     margin: 0 auto;
 }
 .blacklist-section {
-    background: #f6f6f6;
     padding: 20px;
     border-radius: 5px;
     margin-bottom: 20px;
 }
+.connected-devices {
+    margin-top: 20px;
+    padding: 20px;
+    border-radius: 5px;
+}
 .device-list {
-    background: white;
-    border: 1px solid #ddd;
     padding: 15px;
     border-radius: 3px;
     margin-top: 10px;
     font-family: monospace;
+    border: 1px solid rgba(128, 128, 128, 0.3);
 }
 .log-viewer {
     background: #1e1e1e;
@@ -85,14 +93,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     margin-bottom: 15px;
 }
 .status-running {
-    background: #d4edda;
-    border: 1px solid #c3e6cb;
-    color: #155724;
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid #28a745;
+    color: #28a745;
 }
 .status-stopped {
-    background: #f8d7da;
-    border: 1px solid #f5c6cb;
-    color: #721c24;
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid #dc3545;
+    color: #dc3545;
 }
 .btn-custom {
     margin-right: 10px;
@@ -104,46 +112,59 @@ textarea.blacklist-editor {
     font-family: 'Courier New', monospace;
     font-size: 13px;
     padding: 10px;
-    border: 1px solid #ddd;
+    border: 1px solid rgba(128, 128, 128, 0.3);
     border-radius: 3px;
 }
 .help-text {
-    color: #666;
+    opacity: 0.7;
     font-size: 13px;
     margin-top: 5px;
 }
-.connected-devices {
-    margin-top: 20px;
-}
 .device-item {
     padding: 8px;
-    border-bottom: 1px solid #eee;
+    border-bottom: 1px solid rgba(128, 128, 128, 0.2);
 }
 .device-item:last-child {
     border-bottom: none;
 }
 .device-id {
     font-weight: bold;
-    color: #0066cc;
+    color: #ff8c00;
+}
+.message-success {
+    background: rgba(40, 167, 69, 0.2);
+    border: 1px solid #28a745;
+    color: #28a745;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 3px;
+}
+.message-error {
+    background: rgba(220, 53, 69, 0.2);
+    border: 1px solid #dc3545;
+    color: #dc3545;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 3px;
 }
 </style>
 
 <div class="usb-hotplug-container">
     <h2>USB Hotplug Configuration</h2>
-    
+
     <?php echo $message; ?>
-    
+
     <!-- Monitor Status -->
     <?php
     $monitor_running = shell_exec("pgrep -f qemu-vm-monitor.sh");
     $status_class = $monitor_running ? "status-running" : "status-stopped";
     $status_text = $monitor_running ? "Running (PID: " . trim($monitor_running) . ")" : "Stopped";
     ?>
-    
+
     <div class="status-box <?= $status_class ?>">
         <strong>Monitor Status:</strong> <?= $status_text ?>
     </div>
-    
+
     <!-- Control Buttons -->
     <div style="margin-bottom: 20px;">
         <form method="POST" style="display: inline;">
@@ -151,22 +172,22 @@ textarea.blacklist-editor {
             <input type="hidden" name="csrf_token" value="<?= $var['csrf_token'] ?>">
             <button type="submit" class="btn-custom">Restart Monitor</button>
         </form>
-        
+
         <form method="POST" style="display: inline;">
             <input type="hidden" name="action" value="stop_monitor">
             <input type="hidden" name="csrf_token" value="<?= $var['csrf_token'] ?>">
             <button type="submit" class="btn-custom">Stop Monitor</button>
         </form>
-        
+
         <form method="POST" style="display: inline;">
             <input type="hidden" name="action" value="clear_log">
             <input type="hidden" name="csrf_token" value="<?= $var['csrf_token'] ?>">
             <button type="submit" class="btn-custom">Clear Log</button>
         </form>
-        
+
         <button onclick="location.reload();" class="btn-custom">Refresh</button>
     </div>
-    
+
     <!-- Blacklist Configuration -->
     <div class="blacklist-section">
         <h3>Device Blacklist</h3>
@@ -175,7 +196,7 @@ textarea.blacklist-editor {
             Format: VENDOR_ID:PRODUCT_ID followed by an optional comment.
             USB hubs are automatically excluded.
         </p>
-        
+
         <form method="POST">
             <input type="hidden" name="action" value="save_blacklist">
             <input type="hidden" name="csrf_token" value="<?= $var['csrf_token'] ?>">
@@ -193,7 +214,7 @@ textarea.blacklist-editor {
             </div>
         </form>
     </div>
-    
+
     <!-- Connected USB Devices -->
     <div class="connected-devices">
         <h3>Currently Connected USB Devices</h3>
@@ -203,7 +224,7 @@ $devices = shell_exec("lsusb");
 echo htmlspecialchars($devices);
 ?>
         </div>
-        
+
         <div style="margin-top: 15px;">
             <h4>Detailed Device Information</h4>
             <div class="device-list">
@@ -214,22 +235,22 @@ foreach (glob('/sys/bus/usb/devices/*') as $device) {
     $vendor_file = "$device/idVendor";
     $product_file = "$device/idProduct";
     $class_file = "$device/bDeviceClass";
-    
+
     if (file_exists($vendor_file) && file_exists($product_file)) {
         $vendor = trim(file_get_contents($vendor_file));
         $product = trim(file_get_contents($product_file));
         $class = file_exists($class_file) ? trim(file_get_contents($class_file)) : 'unknown';
-        
+
         // Get device name from lsusb
         $lsusb_line = shell_exec("lsusb -d $vendor:$product | head -n1");
         preg_match('/: (.+)$/', $lsusb_line, $matches);
         $name = isset($matches[1]) ? trim($matches[1]) : 'Unknown Device';
-        
+
         // Skip hubs
         if ($class == '09') {
             $name .= ' (USB Hub - auto-excluded)';
         }
-        
+
         $device_info[] = [
             'id' => "$vendor:$product",
             'name' => $name,
@@ -256,7 +277,7 @@ foreach ($device_info as $dev) {
             </p>
         </div>
     </div>
-    
+
     <!-- Log Viewer -->
     <div style="margin-top: 30px;">
         <h3>Recent Log Entries (last 50 lines)</h3>
