@@ -15,6 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($action) {
         case 'save_blacklist':
             $content = $_POST['blacklist_content'] ?? '';
+            // Strip Windows line endings to prevent parsing issues
+            $content = str_replace("\r\n", "\n", $content);
+            $content = str_replace("\r", "\n", $content);
+            // Ensure file ends with newline
+            if (!empty($content) && substr($content, -1) !== "\n") {
+                $content .= "\n";
+            }
             $result = file_put_contents($cfg_file, $content);
             
             if ($result !== false) {

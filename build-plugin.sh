@@ -5,7 +5,7 @@ echo "USB Hotplug Plugin - Build Script"
 echo "========================================="
 echo ""
 
-VERSION="2025.01.12a"
+VERSION="2025.01.12b"
 PLUGIN_NAME="usb-hotplug"
 BUILD_DIR="build"
 PACKAGE_NAME="${PLUGIN_NAME}-${VERSION}"

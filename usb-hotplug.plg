@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2025.01.12a">
+<!ENTITY version   "2025.01.12b">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2025.01.12b
+- Fixed: Line ending handling in web UI (prevents Windows CRLF issues)
+- Ensures config file always has proper Unix line endings
+
 ###2025.01.12a
 - Fixed: CSRF token support for all forms (Save Blacklist now works!)
 - Fixed: Default config without example line to prevent confusion
