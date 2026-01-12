@@ -1,0 +1,5 @@
+# USB Hotplug for VMs
+# Excludes hubs and devices in blacklist (configured via web UI)
+SUBSYSTEM=="usb", ACTION=="add", ENV{DEVTYPE}=="usb_device", ATTR{bDeviceClass}!="09", RUN+="/usr/local/sbin/qemu-usb-hotplug-call.sh add $attr{idVendor} $attr{idProduct}"
+
+SUBSYSTEM=="usb", ACTION=="remove", ENV{DEVTYPE}=="usb_device", ATTR{bDeviceClass}!="09", RUN+="/usr/local/sbin/qemu-usb-hotplug-call.sh remove $attr{idVendor} $attr{idProduct}"

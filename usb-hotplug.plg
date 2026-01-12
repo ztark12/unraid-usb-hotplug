@@ -1,0 +1,131 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+<!ENTITY name      "usb-hotplug">
+<!ENTITY author    "Jesper">
+<!ENTITY version   "2025.01.12a">
+<!ENTITY launch    "Settings/USBHotplug">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/master">
+<!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
+<!ENTITY pkgURL    "&gitURL;/packages">
+<!ENTITY plgPATH   "/boot/config/plugins/&name;">
+<!ENTITY plgNAME   "usb-hotplug">
+<!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
+
+<CHANGES>
+###2025.01.12a
+- Fixed: CSRF token support for all forms (Save Blacklist now works!)
+- Fixed: Default config without example line to prevent confusion
+- Improved: Better form handling and user feedback
+- Tested: Confirmed working on Unraid 6.12.x
+
+###2025.01.12
+- Initial release
+- Automatic USB device attachment on VM startup
+- Real-time hotplug support (plug/unplug devices anytime)
+- Handles device state changes (e.g., 8BitDo controllers)
+- Support for multiple identical devices
+- Automatic stale device cleanup
+- Crash-proof monitoring with error recovery
+- Configurable device blacklist via web UI
+</CHANGES>
+
+<!--
+This plugin provides automatic USB passthrough management for Unraid VMs.
+
+Features:
+- Automatically attaches USB devices when VMs start
+- Monitors for USB plug/unplug events and updates running VMs
+- Handles device state transitions (IDLE to Active mode)
+- Supports multiple devices with identical vendor/product IDs
+- Cleans up stale device references automatically
+- Includes crash protection and error recovery
+- Web-based configuration for device blacklist with CSRF protection
+-->
+
+<!-- Install plugin bundle -->
+<FILE Name="&plgPATH;/&plgNAME;-&version;.txz">
+<URL>&pkgURL;/&plgNAME;-&version;.txz</URL>
+</FILE>
+
+<!-- Install scripts and start services -->
+<FILE Run="/bin/bash">
+<INLINE>
+<![CDATA[
+# Extract plugin files
+tar -xf /boot/config/plugins/usb-hotplug/usb-hotplug-*.txz -C / --no-same-owner
+
+# Make scripts executable
+chmod +x /usr/local/sbin/qemu-usb-hotplug.sh
+chmod +x /usr/local/sbin/qemu-usb-hotplug-call.sh
+chmod +x /usr/local/sbin/qemu-vm-monitor.sh
+
+# Install udev rules
+udevadm control --reload-rules
+
+# Create log file
+touch /var/log/usb-hotplug.log
+chmod 644 /var/log/usb-hotplug.log
+
+# Load existing config or create default
+if [ ! -f "&plgPATH;/usb-hotplug.cfg" ]; then
+    cat > "&plgPATH;/usb-hotplug.cfg" << 'EOF'
+# USB Hotplug Blacklist Configuration
+# Format: VENDOR_ID:PRODUCT_ID  # Description
+
+18a5:0302  # Unraid flash drive
+EOF
+fi
+
+# Start the VM monitor
+pkill -f qemu-vm-monitor 2>/dev/null
+sleep 1
+nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " USB Hotplug plugin installed successfully"
+echo "-----------------------------------------------------------"
+echo " Configure blacklist: Settings → USB Hotplug"
+echo " View logs: tail -f /var/log/usb-hotplug.log"
+echo "-----------------------------------------------------------"
+]]>
+</INLINE>
+</FILE>
+
+<!-- Uninstall script -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+<![CDATA[
+# Stop the monitor
+pkill -f qemu-vm-monitor
+
+# Remove scripts
+rm -f /usr/local/sbin/qemu-usb-hotplug.sh
+rm -f /usr/local/sbin/qemu-usb-hotplug-call.sh
+rm -f /usr/local/sbin/qemu-vm-monitor.sh
+
+# Remove udev rules
+rm -f /etc/udev/rules.d/99-qemu-usb-hotplug.rules
+udevadm control --reload-rules
+
+# Remove web UI files
+rm -rf /usr/local/emhttp/plugins/usb-hotplug
+
+# Remove plugin directory (keeping config backup)
+rm -f /boot/config/plugins/usb-hotplug/*.txz
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " USB Hotplug plugin removed"
+echo "-----------------------------------------------------------"
+echo " Note: Configuration file preserved at:"
+echo " /boot/config/plugins/usb-hotplug/usb-hotplug.cfg"
+echo "-----------------------------------------------------------"
+]]>
+</INLINE>
+</FILE>
+
+</PLUGIN>
