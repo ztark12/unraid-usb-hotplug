@@ -4,9 +4,9 @@
 <!ENTITY author    "Jesper">
 <!ENTITY version   "2025.01.12a">
 <!ENTITY launch    "Settings/USBHotplug">
-<!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/master">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
-<!ENTITY pkgURL    "&gitURL;/packages">
+<!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
+<!ENTITY pkgURL    "https://github.com/ztark12/unraid-usb-hotplug/releases/download/v&version;">
 <!ENTITY plgPATH   "/boot/config/plugins/&name;">
 <!ENTITY plgNAME   "usb-hotplug">
 <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
