@@ -2,14 +2,15 @@
 
 Automatic USB device management for Unraid VMs with real-time hotplug support.
 
-**Version: 2025.01.12a** - Tested and working!
+**Version: 2025.02.11a** - Critical Boot Drive Protection Update!
 
-## What's New in v2025.01.12a
+## What's New in v2025.02.11a
 
-✅ **Fixed CSRF Token Support** - All forms now work properly (Save Blacklist button functional!)  
-✅ **Improved Config Format** - Removed confusing example line from default blacklist  
-✅ **Better User Feedback** - Success/error messages display correctly  
-✅ **Production Ready** - Fully tested on Unraid 6.12.x  
+🔥 **CRITICAL FIX: Auto-Detect Boot Drive** - Monitor now automatically detects and protects your boot drive
+🛡️ **Prevents System Crashes** - No more catastrophic failures if boot drive changes
+✅ **Boot Drive Health Check** - Monitor verifies boot drive accessibility on startup
+✅ **Config Validation** - Detects corrupted config files before they cause issues
+🔒 **Always Protected** - Boot drive is blacklisted even if not in config file  
 
 ## Features
 
@@ -68,6 +69,56 @@ The plugin works automatically:
 - Start VM → Devices auto-attach
 - Plug device → Appears in VM instantly
 - Unplug device → Removed cleanly
+
+## ⚠️ CRITICAL: Boot Drive Changes
+
+**If you change your Unraid USB boot drive, read this IMMEDIATELY:**
+
+### The Problem
+The plugin auto-detects and protects your boot drive from being attached to VMs. However, if you're upgrading from an older version (before v2025.01.12d), you may need to manually add your boot drive to the blacklist.
+
+### Symptoms of Boot Drive Not Protected
+- Server crashes completely when starting a VM
+- Error message: "boot drive is corrupted"
+- System becomes unresponsive (requires physical reboot)
+- Web UI stops responding after VM starts
+
+### Emergency Fix (If System is Crashing)
+
+**Do this BEFORE starting any VMs:**
+
+```bash
+# 1. SSH into your Unraid server
+
+# 2. Find your boot drive's vendor:product ID
+mount | grep /boot
+# Note the device (e.g., /dev/sdb1)
+
+lsusb
+# Find your flash drive brand (Kingston, SanDisk, etc.)
+# Note the ID in format XXXX:XXXX
+
+# 3. Add your boot drive to the blacklist
+# REPLACE 0951:1666 with YOUR ACTUAL boot drive ID!
+cat >> /boot/config/plugins/usb-hotplug/usb-hotplug.cfg << 'EOF'
+0951:1666  # My boot drive - REPLACE THIS ID!
+EOF
+
+# 4. Restart the monitor
+pkill -f qemu-vm-monitor.sh
+nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &
+
+# 5. Verify boot drive is protected
+tail -20 /var/log/usb-hotplug.log
+# Should show: "Boot drive detected and protected: XXXX:XXXX"
+```
+
+### Why This Happens
+When you change boot drives, the new drive has a different vendor:product ID. The plugin now **automatically detects and protects your boot drive**, but older versions relied on manual blacklist configuration.
+
+### Prevention
+✅ **v2025.02.11a and newer** - Boot drive is automatically detected and protected
+⚠️ **Older versions** - Must manually add boot drive to blacklist after changing USB drives
 
 ## Troubleshooting
 

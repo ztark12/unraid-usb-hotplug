@@ -7,12 +7,93 @@ log_msg() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> /var/log/usb-hotplug.log
 }
 
+# Validate config file before reading
+validate_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_msg "WARNING: Config file not found, using defaults"
+        return 1
+    fi
+
+    # Check if file is readable
+    if [ ! -r "$CONFIG_FILE" ]; then
+        log_msg "ERROR: Config file not readable, check permissions"
+        return 1
+    fi
+
+    # Test read with timeout to detect corruption
+    if ! timeout 2 head -100 "$CONFIG_FILE" > /dev/null 2>&1; then
+        log_msg "ERROR: Config file read timeout, possible corruption"
+        return 1
+    fi
+
+    return 0
+}
+
+# Auto-detect and blacklist the boot drive
+detect_boot_drive() {
+    # Find which device is mounted as /boot
+    BOOT_DEVICE=$(mount | grep " /boot " | awk '{print $1}' | sed 's/[0-9]*$//')
+
+    if [ -z "$BOOT_DEVICE" ]; then
+        log_msg "WARNING: Could not detect boot device from mount"
+        return
+    fi
+
+    # Extract just the device name (e.g., sdb from /dev/sdb)
+    BOOT_DEV_NAME=$(basename "$BOOT_DEVICE")
+
+    # Find the USB device that corresponds to this block device
+    for usb_dev in /sys/bus/usb/devices/*; do
+        [ -f "$usb_dev/idVendor" ] || continue
+
+        # Check if this USB device has a block device child
+        for block in /sys/block/*; do
+            if [ -e "$block/device" ]; then
+                BLOCK_USB=$(readlink -f "$block/device" 2>/dev/null)
+                USB_PATH=$(readlink -f "$usb_dev" 2>/dev/null)
+
+                # Check if the block device belongs to this USB device
+                if [ -n "$BLOCK_USB" ] && [ -n "$USB_PATH" ] && [[ "$BLOCK_USB" == "$USB_PATH"* ]]; then
+                    BLOCK_NAME=$(basename "$block")
+
+                    # Check if this is our boot device
+                    if [ "$BLOCK_NAME" == "$BOOT_DEV_NAME" ]; then
+                        BOOT_VENDOR=$(cat "$usb_dev/idVendor" 2>/dev/null)
+                        BOOT_PRODUCT=$(cat "$usb_dev/idProduct" 2>/dev/null)
+                        BOOT_ID="${BOOT_VENDOR}:${BOOT_PRODUCT}"
+
+                        # Check if already in blacklist
+                        ALREADY_BLACKLISTED=false
+                        for blacklisted in "${BLACKLIST[@]}"; do
+                            if [ "$BOOT_ID" == "$blacklisted" ]; then
+                                ALREADY_BLACKLISTED=true
+                                break
+                            fi
+                        done
+
+                        if [ "$ALREADY_BLACKLISTED" == "false" ]; then
+                            log_msg "CRITICAL: Boot drive $BOOT_ID not in blacklist, auto-adding for protection"
+                            BLACKLIST+=("$BOOT_ID")
+                        fi
+
+                        log_msg "Boot drive detected and protected: $BOOT_ID (device: $BOOT_DEVICE)"
+                        return
+                    fi
+                fi
+            fi
+        done
+    done
+
+    log_msg "WARNING: Could not match boot device $BOOT_DEVICE to USB device"
+}
+
 # Load blacklist from config file
 load_blacklist() {
     BLACKLIST=()
-    
-    if [ -f "$CONFIG_FILE" ]; then
-        while IFS= read -r line || [ -n "$line" ]; do
+
+    # Validate config before attempting to read
+    if validate_config; then
+        while IFS= read -r line; do
             # Skip empty lines and comments
             [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
@@ -25,12 +106,16 @@ load_blacklist() {
             fi
         done < "$CONFIG_FILE"
     fi
-    
+
     # Always include Unraid flash drive as fallback
     if [ ${#BLACKLIST[@]} -eq 0 ]; then
+        log_msg "Using fallback blacklist (18a5:0302)"
         BLACKLIST=("18a5:0302")
     fi
-    
+
+    # CRITICAL: Auto-detect and protect the current boot drive
+    detect_boot_drive
+
     log_msg "Loaded ${#BLACKLIST[@]} blacklisted devices"
 }
 
@@ -120,6 +205,14 @@ XMLEOF
 }
 
 log_msg "VM monitor started (PID: $$)"
+
+# Pre-flight check: Verify boot drive is accessible
+if ! timeout 5 ls /boot/config/plugins/usb-hotplug/ > /dev/null 2>&1; then
+    log_msg "FATAL: Cannot access boot drive (/boot), monitor exiting to prevent system corruption"
+    exit 1
+fi
+
+log_msg "Boot drive health check: OK"
 
 # Load initial blacklist
 load_blacklist

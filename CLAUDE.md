@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 USB Hotplug Plugin for Unraid - Provides automatic USB device management for Unraid VMs with real-time hotplug support. The plugin allows USB devices to be automatically attached when VMs start and dynamically added/removed as devices are plugged/unplugged.
 
-**Current Version:** 2025.01.12c
+**Current Version:** 2025.02.11a
 
 ## Build and Deployment
 
@@ -21,8 +21,8 @@ This creates `build/usb-hotplug-<VERSION>.txz` containing all plugin files in th
 ### Version Management
 
 Version number must be updated in TWO places when releasing:
-1. `build-plugin.sh` - Line 8: `VERSION="2025.01.12c"`
-2. `usb-hotplug.plg` - Line 5: `<!ENTITY version   "2025.01.12c">`
+1. `build-plugin.sh` - Line 8: `VERSION="2025.02.11a"`
+2. `usb-hotplug.plg` - Line 5: `<!ENTITY version   "2025.02.11a">`
 
 ### GitHub Release Process
 
@@ -79,11 +79,24 @@ VM starts
 
 ## Key Technical Details
 
+### Boot Drive Protection (CRITICAL SAFETY FEATURE)
+- **Auto-detection**: Monitor automatically detects the Unraid boot drive on startup
+- **Automatic blacklisting**: Boot drive is always added to blacklist, even if not in config
+- **Why this matters**: Prevents catastrophic system crash if boot drive is accidentally attached to VM
+- **Detection method**:
+  1. Finds device mounted at `/boot` via `mount` command
+  2. Traces block device to USB parent via `/sys/block/*/device`
+  3. Reads vendor:product ID from `/sys/bus/usb/devices/*/idVendor` and `idProduct`
+  4. Adds to runtime blacklist if not already present
+- **Fallback**: If detection fails, logs warning but continues (relies on config file)
+- **Health check**: Monitor verifies `/boot` is accessible on startup (exits if not)
+
 ### Blacklist Format
 - Config file: `/boot/config/plugins/usb-hotplug/usb-hotplug.cfg`
 - Format: `VENDOR_ID:PRODUCT_ID  # Optional comment`
 - Regex validation: `^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$`
 - Monitor reloads blacklist on each VM start (allows runtime updates)
+- **Boot drive is ALWAYS protected** regardless of config content (auto-detected)
 
 ### Device Identification
 - Devices identified by bus:device numbers (not vendor:product) for attach/detach
