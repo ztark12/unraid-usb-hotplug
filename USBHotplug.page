@@ -557,7 +557,17 @@ function toggleBlacklist(checkbox) {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        // Get response as text first to see what we're actually receiving
+        return response.text().then(text => {
+            console.log('Server response:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
+        });
+    })
     .then(data => {
         if (data.success) {
             showMessage('&check; Blacklist updated and monitor restarted', 'success');
@@ -568,6 +578,7 @@ function toggleBlacklist(checkbox) {
         }
     })
     .catch(error => {
+        console.error('Error details:', error);
         showMessage('✗ Network error: ' + error.message, 'error');
         // Revert checkbox state
         checkbox.checked = !checkbox.checked;
@@ -598,7 +609,17 @@ function removeFromBlacklist(deviceId) {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: formData
     })
-    .then(response => response.json())
+    .then(response => {
+        // Get response as text first to see what we're actually receiving
+        return response.text().then(text => {
+            console.log('Server response:', text);
+            try {
+                return JSON.parse(text);
+            } catch (e) {
+                throw new Error('Invalid JSON response: ' + text.substring(0, 100));
+            }
+        });
+    })
     .then(data => {
         if (data.success) {
             showMessage('&check; Device removed from blacklist', 'success');
@@ -609,6 +630,7 @@ function removeFromBlacklist(deviceId) {
         }
     })
     .catch(error => {
+        console.error('Error details:', error);
         showMessage('✗ Network error: ' + error.message, 'error');
     });
 }
