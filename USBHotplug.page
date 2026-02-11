@@ -2,6 +2,47 @@ Menu="OtherSettings"
 Title="USB Hotplug"
 ---
 <?php
+// CRITICAL: Handle AJAX requests FIRST, before ANY output
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_blacklist') {
+    // Clear ALL output buffers
+    while (ob_get_level()) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/json');
+
+    $plugin = "usb-hotplug";
+    $cfg_file = "/boot/config/plugins/$plugin/usb-hotplug.cfg";
+
+    $devices_json = $_POST['devices'] ?? '[]';
+    $checked_devices = json_decode($devices_json, true);
+
+    if (!is_array($checked_devices)) {
+        echo json_encode(['success' => false, 'error' => 'Invalid device data']);
+        die();
+    }
+
+    // Generate config file content
+    $content = "";
+    foreach ($checked_devices as $device_id) {
+        if (preg_match('/^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$/', $device_id)) {
+            $content .= "$device_id\n";
+        }
+    }
+
+    $result = file_put_contents($cfg_file, $content);
+
+    if ($result !== false) {
+        shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
+        sleep(1);
+        shell_exec("nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &");
+        echo json_encode(['success' => true]);
+    } else {
+        echo json_encode(['success' => false, 'error' => 'Failed to write config file']);
+    }
+    die();
+}
+
 $plugin = "usb-hotplug";
 $cfg_file = "/boot/config/plugins/$plugin/usb-hotplug.cfg";
 $log_file = "/var/log/usb-hotplug.log";
@@ -144,45 +185,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
     switch ($action) {
-        case 'update_blacklist':
-            // Handle AJAX request for checkbox-based blacklist updates
-            // Clear any output buffers to ensure clean JSON response
-            while (ob_get_level()) {
-                ob_end_clean();
-            }
-
-            header('Content-Type: application/json');
-
-            $devices_json = $_POST['devices'] ?? '[]';
-            $checked_devices = json_decode($devices_json, true);
-
-            if (!is_array($checked_devices)) {
-                echo json_encode(['success' => false, 'error' => 'Invalid device data']);
-                exit;
-            }
-
-            // Generate config file content
-            $content = "";
-            foreach ($checked_devices as $device_id) {
-                // Validate format
-                if (preg_match('/^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$/', $device_id)) {
-                    $content .= "$device_id\n";
-                }
-            }
-
-            $result = file_put_contents($cfg_file, $content);
-
-            if ($result !== false) {
-                // Restart monitor to apply changes
-                shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
-                sleep(1);
-                shell_exec("nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &");
-                echo json_encode(['success' => true]);
-            } else {
-                echo json_encode(['success' => false, 'error' => 'Failed to write config file']);
-            }
-            exit;
-
         case 'restart_monitor':
             shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
             sleep(1);
