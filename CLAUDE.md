@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 USB Hotplug Plugin for Unraid - Provides automatic USB device management for Unraid VMs with real-time hotplug support. The plugin allows USB devices to be automatically attached when VMs start and dynamically added/removed as devices are plugged/unplugged.
 
-**Current Version:** 2025.02.11a
+**Current Version:** 2025.02.11b
 
 ## Build and Deployment
 
@@ -20,9 +20,18 @@ This creates `build/usb-hotplug-<VERSION>.txz` containing all plugin files in th
 
 ### Version Management
 
-Version number must be updated in TWO places when releasing:
-1. `build-plugin.sh` - Line 8: `VERSION="2025.02.11a"`
-2. `usb-hotplug.plg` - Line 5: `<!ENTITY version   "2025.02.11a">`
+**Version Naming Convention:**
+- Format: `YYYY.MM.DD[a-z]`
+- Date represents the release date
+- Letter suffix (a, b, c, etc.) for multiple releases on same day
+- Examples: `2025.02.11a` (first release), `2025.02.11b` (second release same day)
+- Increment letter for bug fixes or minor updates on same day
+- Use next date for new feature releases
+
+**IMPORTANT:** Version number must be updated in THREE places when releasing:
+1. `build-plugin.sh` - Line 8: `VERSION="2025.02.11b"`
+2. `usb-hotplug.plg` - Line 5: `<!ENTITY version   "2025.02.11b">`
+3. `CLAUDE.md` - Line 9: `**Current Version:** 2025.02.11b`
 
 ### GitHub Release Process
 
