@@ -146,6 +146,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($action) {
         case 'update_blacklist':
             // Handle AJAX request for checkbox-based blacklist updates
+            // Clear any output buffers to ensure clean JSON response
+            while (ob_get_level()) {
+                ob_end_clean();
+            }
+
             header('Content-Type: application/json');
 
             $devices_json = $_POST['devices'] ?? '[]';
