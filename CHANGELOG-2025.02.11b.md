@@ -4,11 +4,34 @@
 2025-02-11
 
 ## Summary
-Updated USB Hotplug configuration page with improved Unraid-native styling, fixed character encoding issues, and updated version numbering.
+Updated USB Hotplug configuration page with improved Unraid-native styling, fixed character encoding issues, fixed AJAX JSON parsing error, and updated version numbering.
 
 ## Changes Made
 
-### 1. Version Update (2025.02.11a → 2025.02.11b)
+### 1. Critical Fix: AJAX Handler Separation
+**Problem:** Auto-save checkbox functionality failed with error "The string did not match the expected pattern"
+- Unraid's `.page` framework wraps ALL output in HTML, even with early interception
+- AJAX responses returned full HTML page + JSON at end instead of pure JSON
+- Browser's JSON parser couldn't handle the mixed content
+
+**Solution:** Created standalone AJAX endpoint outside `.page` framework
+- **New file:** `ajax_handler.php` - Handles `update_blacklist` action
+- Returns pure JSON without HTML wrapping
+- Maintains CSRF token protection
+- Restarts monitor after blacklist updates
+
+**Files affected:**
+- `ajax_handler.php` (NEW) - Standalone AJAX endpoint
+- `USBHotplug.page` - Updated JavaScript to fetch from `/Settings/USBHotplug/ajax_handler.php`
+- `build-plugin.sh` - Added ajax_handler.php to build process
+
+**Technical details:**
+- Validates device IDs with regex: `^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$`
+- Writes blacklist to `/boot/config/plugins/usb-hotplug/usb-hotplug.cfg`
+- Restarts monitor via `killall qemu-vm-monitor.sh` (auto-restarts via rc.local)
+- Returns JSON: `{"success": true}` or `{"success": false, "error": "message"}`
+
+### 2. Version Update (2025.02.11a → 2025.02.11b)
 **Files updated:**
 - `build-plugin.sh` - Line 8: Updated VERSION variable
 - `usb-hotplug.plg` - Line 5: Updated version entity
@@ -19,7 +42,7 @@ Updated USB Hotplug configuration page with improved Unraid-native styling, fixe
 - Clarified when to increment letter vs date
 - Updated from 2 to 3 places to update version (added CLAUDE.md)
 
-### 2. Character Encoding Fixes
+### 3. Character Encoding Fixes
 **Problem:** Unicode checkmarks (✓, ✕) displayed as garbled text ("âœ•", "âœ")
 
 **Solution:** Replaced with HTML entities
@@ -36,7 +59,7 @@ Updated USB Hotplug configuration page with improved Unraid-native styling, fixe
 - Device remove button label
 - JavaScript auto-save success messages (2 places)
 
-### 3. CSS Improvements - Unraid Design System Compliance
+### 4. CSS Improvements - Unraid Design System Compliance
 
 **Design Philosophy:**
 - Matched Unraid's dark theme aesthetic
@@ -109,11 +132,12 @@ Updated USB Hotplug configuration page with improved Unraid-native styling, fixe
 - Consistent border-radius: 4px
 
 ## Files Modified
-1. `build-plugin.sh` - Version update
-2. `usb-hotplug.plg` - Version update
-3. `CLAUDE.md` - Version update + documentation
-4. `USBHotplug.page` - Character encoding + CSS improvements
-5. `test-ui-preview.html` - Updated to match new styling
+1. `ajax_handler.php` - NEW - Standalone AJAX endpoint for checkbox auto-save
+2. `build-plugin.sh` - Version update + ajax_handler.php added to build
+3. `usb-hotplug.plg` - Version update
+4. `CLAUDE.md` - Version update + documentation
+5. `USBHotplug.page` - AJAX endpoint update + character encoding + CSS improvements
+6. `test-ui-preview.html` - Updated to match new styling
 
 ## Testing
 - ✅ Plugin builds successfully
@@ -138,9 +162,10 @@ None
 ## Next Steps
 1. Upload `build/usb-hotplug-2025.02.11b.txz` to GitHub releases
 2. Test installation on Unraid system
-3. Verify UI appearance in both light and dark themes
-4. Test auto-save functionality
+3. **CRITICAL:** Test checkbox auto-save functionality (verify AJAX handler works)
+4. Verify UI appearance in both light and dark themes
 5. Confirm character encoding displays correctly
+6. Test device blacklisting with various USB devices
 
 ---
 *Generated: 2025-02-11*

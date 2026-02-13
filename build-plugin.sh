@@ -168,8 +168,9 @@ UDEV
 
 echo "Copying web UI..."
 
-# Copy web UI page
+# Copy web UI page and AJAX handler
 cp USBHotplug.page "$BUILD_DIR/package/usr/local/emhttp/plugins/$PLUGIN_NAME/"
+cp ajax_handler.php "$BUILD_DIR/package/usr/local/emhttp/plugins/$PLUGIN_NAME/"
 
 # Create default config file (without example line that causes confusion)
 cat > "$BUILD_DIR/package/boot/config/plugins/$PLUGIN_NAME/usb-hotplug.cfg" << 'CONFIG'
