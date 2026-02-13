@@ -521,7 +521,7 @@ function toggleBlacklist(checkbox) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showMessage('&check; Blacklist updated and monitor restarted', 'success');
+            showMessage('✓ Blacklist updated and monitor restarted', 'success');
         } else {
             showMessage('✗ Failed to update blacklist: ' + (data.error || 'Unknown error'), 'error');
             // Revert checkbox state
@@ -563,7 +563,7 @@ function removeFromBlacklist(deviceId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showMessage('&check; Device removed from blacklist', 'success');
+            showMessage('✓ Device removed from blacklist', 'success');
             // Reload page to update UI
             setTimeout(() => location.reload(), 1000);
         } else {
