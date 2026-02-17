@@ -103,6 +103,7 @@ load_blacklist() {
             # Validate format (XXXX:XXXX)
             if [[ "$DEVICE_ID" =~ ^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$ ]]; then
                 BLACKLIST+=("$DEVICE_ID")
+                log_msg "Blacklisted: $DEVICE_ID"
             fi
         done < "$CONFIG_FILE"
     fi
@@ -144,6 +145,7 @@ attach_usb_devices() {
         
         # Skip hubs (class 09)
         if [ "$DEVICE_CLASS" == "09" ]; then
+            log_msg "SKIP hub: $DEVICE_ID (bus:$BUSNUM dev:$DEVNUM)"
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             continue
         fi
@@ -153,11 +155,11 @@ attach_usb_devices() {
         for blacklisted in "${BLACKLIST[@]}"; do
             if [ "$DEVICE_ID" == "$blacklisted" ]; then
                 SKIP=true
-                log_msg "Skipping blacklisted device: $DEVICE_ID"
+                log_msg "SKIP blacklisted: $DEVICE_ID (bus:$BUSNUM dev:$DEVNUM)"
                 break
             fi
         done
-        
+
         if [ "$SKIP" == "true" ]; then
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             continue
@@ -170,10 +172,36 @@ attach_usb_devices() {
         fi
         
         if [ "$ALREADY_ATTACHED" == "true" ]; then
-            log_msg "Already attached: ${DEVICE_ID} (bus:$BUSNUM dev:$DEVNUM)"
+            log_msg "SKIP already attached: ${DEVICE_ID} (bus:$BUSNUM dev:$DEVNUM)"
             continue
         fi
-        
+
+        # SAFETY: independently verify this device is not the current boot drive
+        # This is a defense-in-depth check that does NOT depend on the blacklist
+        BOOT_DEV=$(mount | grep " /boot " | awk '{print $1}')
+        if [ -n "$BOOT_DEV" ]; then
+            IS_BOOT=false
+            for usb_check in /sys/bus/usb/devices/*; do
+                [ -f "$usb_check/idVendor" ] || continue
+                CHECK_BUS=$(cat "$usb_check/busnum" 2>/dev/null)
+                CHECK_DEV=$(cat "$usb_check/devnum" 2>/dev/null)
+                if [ "$CHECK_BUS" = "$BUSNUM" ] && [ "$CHECK_DEV" = "$DEVNUM" ]; then
+                    BOOT_BLOCK=$(ls /sys/block/ 2>/dev/null | while read blk; do
+                        BLK_USB=$(readlink -f "/sys/block/$blk/device" 2>/dev/null)
+                        USB_P=$(readlink -f "$usb_check" 2>/dev/null)
+                        [[ -n "$BLK_USB" && -n "$USB_P" && "$BLK_USB" == "$USB_P"* ]] && echo "$blk"
+                    done)
+                    if [ -n "$BOOT_BLOCK" ] && echo "$BOOT_DEV" | grep -q "$BOOT_BLOCK"; then
+                        log_msg "CRITICAL SAFETY BLOCK: $DEVICE_ID (bus:$BUSNUM dev:$DEVNUM) is the boot drive! Refusing to attach."
+                        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+                        IS_BOOT=true
+                    fi
+                    break
+                fi
+            done
+            [ "$IS_BOOT" = "true" ] && continue
+        fi
+
         XML_FILE="/tmp/usb-startup-${BUSNUM}-${DEVNUM}.xml"
         
         cat > "$XML_FILE" << XMLEOF
@@ -204,6 +232,18 @@ XMLEOF
     log_msg "Summary: Attached $ATTACHED_COUNT devices, skipped $SKIPPED_COUNT"
 }
 
+# Single-instance lock: prevent multiple monitor instances
+PIDFILE="/var/run/usb-hotplug-monitor.pid"
+if [ -f "$PIDFILE" ]; then
+    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
+    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+        log_msg "Another instance already running (PID: $OLD_PID), exiting"
+        exit 0
+    fi
+fi
+echo $$ > "$PIDFILE"
+trap "rm -f '$PIDFILE'" EXIT
+
 log_msg "VM monitor started (PID: $$)"
 
 # Pre-flight check: Verify boot drive is accessible
@@ -216,6 +256,22 @@ log_msg "Boot drive health check: OK"
 
 # Load initial blacklist
 load_blacklist
+
+# Wait for libvirt to become available before entering the main loop.
+# On boot the monitor starts before libvirtd is ready, so we poll silently
+# rather than burning through MAX_ERRORS and exiting.
+log_msg "Waiting for libvirt to become ready..."
+LIBVIRT_WAIT=0
+LIBVIRT_TIMEOUT=300
+while ! timeout 3 virsh list --name > /dev/null 2>&1; do
+    sleep 5
+    LIBVIRT_WAIT=$((LIBVIRT_WAIT + 5))
+    if [ $LIBVIRT_WAIT -ge $LIBVIRT_TIMEOUT ]; then
+        log_msg "FATAL: libvirt not available after ${LIBVIRT_TIMEOUT}s, monitor exiting"
+        exit 1
+    fi
+done
+log_msg "libvirt is ready (waited ${LIBVIRT_WAIT}s)"
 
 PREVIOUS_VMS=""
 ERROR_COUNT=0

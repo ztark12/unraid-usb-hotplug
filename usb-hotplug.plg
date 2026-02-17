@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2025.02.17a">
+<!ENTITY version   "2025.02.17b">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2025.02.17b
+- Fix: Wait for libvirt to become ready before polling — eliminates cascade of virsh errors in syslog on boot
+
 ###2025.02.17a
 - **CRITICAL FIX**: Single-instance lock prevents multiple monitor instances from running simultaneously
 - **CRITICAL FIX**: Defense-in-depth boot drive safety check in attach_usb_devices() — independent of blacklist state

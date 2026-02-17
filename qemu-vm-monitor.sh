@@ -257,6 +257,22 @@ log_msg "Boot drive health check: OK"
 # Load initial blacklist
 load_blacklist
 
+# Wait for libvirt to become available before entering the main loop.
+# On boot the monitor starts before libvirtd is ready, so we poll silently
+# rather than burning through MAX_ERRORS and exiting.
+log_msg "Waiting for libvirt to become ready..."
+LIBVIRT_WAIT=0
+LIBVIRT_TIMEOUT=300
+while ! timeout 3 virsh list --name > /dev/null 2>&1; do
+    sleep 5
+    LIBVIRT_WAIT=$((LIBVIRT_WAIT + 5))
+    if [ $LIBVIRT_WAIT -ge $LIBVIRT_TIMEOUT ]; then
+        log_msg "FATAL: libvirt not available after ${LIBVIRT_TIMEOUT}s, monitor exiting"
+        exit 1
+    fi
+done
+log_msg "libvirt is ready (waited ${LIBVIRT_WAIT}s)"
+
 PREVIOUS_VMS=""
 ERROR_COUNT=0
 MAX_ERRORS=10
