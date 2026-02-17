@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2025.02.11b">
+<!ENTITY version   "2025.02.17a">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2025.02.17a
+- **CRITICAL FIX**: Single-instance lock prevents multiple monitor instances from running simultaneously
+- **CRITICAL FIX**: Defense-in-depth boot drive safety check in attach_usb_devices() — independent of blacklist state
+- Improved process kill sequence (SIGTERM + SIGKILL) to prevent lingering instances on restart
+- Verbose diagnostic logging: each blacklist entry and device skip reason now logged to syslog
+
 ###2025.02.11a
 - **CRITICAL FIX**: Auto-detect and protect boot drive from being attached to VMs
 - Prevents catastrophic system crash when boot drive changes

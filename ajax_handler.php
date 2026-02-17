@@ -37,8 +37,9 @@ $result = file_put_contents($cfg_file, $content);
 
 if ($result !== false) {
     // Restart monitor to apply changes
-    shell_exec("pkill -f qemu-vm-monitor.sh 2>&1");
-    sleep(1);
+    shell_exec("pkill -f qemu-vm-monitor.sh 2>/dev/null");
+    sleep(2);
+    shell_exec("pkill -9 -f qemu-vm-monitor.sh 2>/dev/null");
     shell_exec("nohup /usr/local/sbin/qemu-vm-monitor.sh > /dev/null 2>&1 &");
 
     echo json_encode(['success' => true]);
