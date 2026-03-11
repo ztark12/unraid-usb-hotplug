@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2025.03.11b">
+<!ENTITY version   "2026.03.11a">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2026.03.11a
+- New: Per-device blacklist using physical USB port path (e.g., 2dc8:301c@1-1.2)
+- New: Identical devices (same vendor:product) now appear as separate rows in the UI, each showing their port path
+- Fix: qemu-usb-hotplug.sh now checks the blacklist during hotplug events (previously only checked at VM startup)
+- Config format: vendor:product entries remain global; vendor:product@port entries are port-specific (backward compatible)
+
 ###2025.03.11b
 - Fix: Plugin install broken on Unraid 7.2.4 — XML entities are not expanded inside CDATA inline scripts; replaced entity-based tar path with pure shell approach (ls -t | head -1)
 - Fix: Settings page blank on Unraid 7.x (PHP 8.1) — null-safe shell_exec returns for preg_match and htmlspecialchars

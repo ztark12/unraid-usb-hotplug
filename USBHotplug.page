@@ -51,8 +51,8 @@ function load_blacklist($cfg_file) {
             $line = trim($line);
             if (empty($line) || $line[0] === '#') continue;
 
-            // Extract vendor:product ID
-            if (preg_match('/^([0-9a-fA-F]{4}:[0-9a-fA-F]{4})/', $line, $matches)) {
+            // Extract vendor:product ID with optional @port suffix
+            if (preg_match('/^([0-9a-fA-F]{4}:[0-9a-fA-F]{4}(@[\d.\-]+)?)/', $line, $matches)) {
                 $blacklisted[] = $matches[1];
             }
         }
@@ -61,10 +61,13 @@ function load_blacklist($cfg_file) {
 }
 
 // Get all devices (connected and disconnected blacklisted)
+// Each connected device gets its own row keyed by "vendor:product@port_path".
+// Identical devices (same vendor:product) at different ports appear as separate rows.
 function get_all_devices($cfg_file) {
     $devices = [];
     $blacklisted = load_blacklist($cfg_file);
     $boot_device_id = detect_boot_device();
+    $name_cache = [];
 
     // Scan connected USB devices
     foreach (glob('/sys/bus/usb/devices/*') as $device) {
@@ -78,37 +81,68 @@ function get_all_devices($cfg_file) {
             $class = file_exists($class_file) ? trim(file_get_contents($class_file)) : '';
 
             $device_id = "$vendor:$product";
+            $port_path = basename($device);
+            $key = "$device_id@$port_path";
 
-            if (isset($devices[$device_id])) continue; // Skip duplicates
-
-            // Get device name from lsusb
-            $lsusb_line = shell_exec("lsusb -d $vendor:$product | head -n1") ?? '';
-            preg_match('/: (.+)$/', $lsusb_line, $matches);
-            $name = isset($matches[1]) ? trim($matches[1]) : 'Unknown Device';
+            // Get device name from lsusb (cached per vendor:product to avoid repeated calls)
+            if (!isset($name_cache[$device_id])) {
+                $lsusb_line = shell_exec("lsusb -d $vendor:$product | head -n1") ?? '';
+                preg_match('/: (.+)$/', $lsusb_line, $matches);
+                $name_cache[$device_id] = isset($matches[1]) ? trim($matches[1]) : 'Unknown Device';
+            }
+            $name = $name_cache[$device_id];
 
             $is_hub = ($class === '09');
             $is_boot = ($device_id === $boot_device_id);
 
-            $devices[$device_id] = [
+            $devices[$key] = [
                 'name' => $name,
+                'device_id' => $device_id,
+                'port_path' => $port_path,
                 'connected' => true,
                 'protected' => $is_hub || $is_boot,
-                'blacklisted' => in_array($device_id, $blacklisted) || $is_hub || $is_boot,
+                'blacklisted' => in_array($device_id, $blacklisted) || in_array($key, $blacklisted) || $is_hub || $is_boot,
                 'protection_reason' => $is_boot ? 'Boot Device' : ($is_hub ? 'USB Hub' : null)
             ];
         }
     }
 
     // Add disconnected blacklisted devices
-    foreach ($blacklisted as $device_id) {
-        if (!isset($devices[$device_id])) {
-            $devices[$device_id] = [
-                'name' => 'Unknown Device',
-                'connected' => false,
-                'protected' => false,
-                'blacklisted' => true,
-                'protection_reason' => null
-            ];
+    foreach ($blacklisted as $entry) {
+        if (strpos($entry, '@') !== false) {
+            // Port-specific entry: show as disconnected only if that exact port isn't connected
+            if (!isset($devices[$entry])) {
+                [$device_id_part, $port_part] = explode('@', $entry, 2);
+                $devices[$entry] = [
+                    'name' => 'Unknown Device',
+                    'device_id' => $device_id_part,
+                    'port_path' => $port_part,
+                    'connected' => false,
+                    'protected' => false,
+                    'blacklisted' => true,
+                    'protection_reason' => null
+                ];
+            }
+        } else {
+            // Global entry: show as disconnected only if no connected instance exists
+            $has_connected = false;
+            foreach ($devices as $dkey => $dev) {
+                if ($dev['connected'] && $dev['device_id'] === $entry) {
+                    $has_connected = true;
+                    break;
+                }
+            }
+            if (!$has_connected && !isset($devices[$entry])) {
+                $devices[$entry] = [
+                    'name' => 'Unknown Device',
+                    'device_id' => $entry,
+                    'port_path' => null,
+                    'connected' => false,
+                    'protected' => false,
+                    'blacklisted' => true,
+                    'protection_reason' => null
+                ];
+            }
         }
     }
 
@@ -132,8 +166,10 @@ function sort_devices($devices) {
         if ($a['connected'] && !$b['connected']) return -1;
         if (!$a['connected'] && $b['connected']) return 1;
 
-        // Alphabetically by name
-        return strcasecmp($a['name'], $b['name']);
+        // Alphabetically by name, then by port path for identical devices
+        $name_cmp = strcasecmp($a['name'], $b['name']);
+        if ($name_cmp !== 0) return $name_cmp;
+        return strcmp($a['port_path'] ?? '', $b['port_path'] ?? '');
     });
 
     return $devices;
@@ -328,6 +364,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     letter-spacing: 0.3px;
 }
 
+/* Port Badge */
+.port-badge {
+    background: rgba(0, 120, 215, 0.2);
+    color: #5bc0de;
+    border: 1px solid rgba(0, 120, 215, 0.35);
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-family: 'Courier New', Consolas, monospace;
+    margin-left: 10px;
+    font-weight: 500;
+}
+
 /* Remove Button */
 .remove-device-btn {
     background: rgba(220, 53, 69, 0.8);
@@ -432,7 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $all_devices = get_all_devices($cfg_file);
 $sorted_devices = sort_devices($all_devices);
 
-foreach ($sorted_devices as $device_id => $device) {
+foreach ($sorted_devices as $key => $device) {
     $row_classes = ['device-row'];
     if ($device['protected']) $row_classes[] = 'protected';
     if (!$device['connected']) $row_classes[] = 'disconnected';
@@ -440,12 +489,16 @@ foreach ($sorted_devices as $device_id => $device) {
     echo '<div class="' . implode(' ', $row_classes) . '">';
     echo '    <label>';
     echo '        <input type="checkbox" ';
-    echo '               data-device-id="' . htmlspecialchars($device_id) . '" ';
+    echo '               data-device-id="' . htmlspecialchars($key) . '" ';
     if ($device['blacklisted']) echo 'checked ';
     if ($device['protected']) echo 'disabled ';
     echo '               onchange="toggleBlacklist(this)">';
     echo '        <span class="device-name">' . htmlspecialchars($device['name']) . '</span>';
-    echo '        <span class="device-id-span">(' . htmlspecialchars($device_id) . ')</span>';
+    echo '        <span class="device-id-span">(' . htmlspecialchars($device['device_id']) . ')</span>';
+
+    if ($device['connected'] && $device['port_path']) {
+        echo '        <span class="port-badge">Port ' . htmlspecialchars($device['port_path']) . '</span>';
+    }
 
     if ($device['protection_reason']) {
         echo '        <span class="protection-badge">' . htmlspecialchars($device['protection_reason']) . '</span>';
@@ -458,7 +511,7 @@ foreach ($sorted_devices as $device_id => $device) {
     echo '    </label>';
 
     if (!$device['connected'] && !$device['protected']) {
-        echo '    <button class="remove-device-btn" onclick="removeFromBlacklist(\'' . htmlspecialchars($device_id) . '\')" title="Remove from blacklist">&times;</button>';
+        echo '    <button class="remove-device-btn" onclick="removeFromBlacklist(\'' . htmlspecialchars($key) . '\')" title="Remove from blacklist">&times;</button>';
     }
 
     echo '</div>';

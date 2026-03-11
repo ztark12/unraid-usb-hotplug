@@ -3,13 +3,38 @@
 ACTION=$1
 VENDOR=$2
 PRODUCT=$3
+PORT_PATH=$4
+
+CONFIG_FILE="/boot/config/plugins/usb-hotplug/usb-hotplug.cfg"
 
 log_msg() {
     logger "qemu-usb-hotplug: $1"
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> /var/log/usb-hotplug.log
 }
 
-log_msg "ACTION=$ACTION VENDOR=$VENDOR PRODUCT=$PRODUCT"
+# Check if VENDOR:PRODUCT (optionally at PORT_PATH) is blacklisted.
+# Matches global entries (vendor:product) and port-specific entries (vendor:product@port).
+# Returns 0 if blacklisted, 1 if not.
+check_blacklist() {
+    local vendor="$1"
+    local product="$2"
+    local port="$3"
+    local device_id="${vendor}:${product}"
+    [ ! -f "$CONFIG_FILE" ] && return 1
+
+    while IFS= read -r line; do
+        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+        local entry
+        entry=$(echo "$line" | awk '{print $1}')
+        if [ "$entry" == "$device_id" ] || [ "$entry" == "${device_id}@${port}" ]; then
+            return 0
+        fi
+    done < "$CONFIG_FILE"
+
+    return 1
+}
+
+log_msg "ACTION=$ACTION VENDOR=$VENDOR PRODUCT=$PRODUCT PORT=$PORT_PATH"
 
 RUNNING_VM=$(timeout 3 virsh list --state-running --name 2>/dev/null | head -n 1)
 
@@ -20,19 +45,19 @@ fi
 
 if [ "$ACTION" == "remove" ]; then
     log_msg "Device ${VENDOR}:${PRODUCT} unplugged"
-    
+
     # Find and remove stale USB device entries
     virsh dumpxml "$RUNNING_VM" | grep -A10 "hostdev mode='subsystem' type='usb'" | while IFS= read -r line; do
         if echo "$line" | grep -q "<address bus="; then
             BUS=$(echo "$line" | sed -n "s/.*bus='\([0-9]*\)'.*/\1/p")
             DEV=$(echo "$line" | sed -n "s/.*device='\([0-9]*\)'.*/\1/p")
-            
+
             if [ -n "$BUS" ] && [ -n "$DEV" ]; then
                 DEVICE_INFO=$(lsusb -s ${BUS}:${DEV} 2>/dev/null)
-                
+
                 if [ -z "$DEVICE_INFO" ]; then
                     log_msg "Removing stale entry bus:$BUS dev:$DEV"
-                    
+
                     XML_FILE="/tmp/usb-detach-${BUS}-${DEV}-$$.xml"
                     cat > "$XML_FILE" << XMLEOF
 <hostdev mode='subsystem' type='usb'>
@@ -41,36 +66,42 @@ if [ "$ACTION" == "remove" ]; then
   </source>
 </hostdev>
 XMLEOF
-                    
+
                     virsh detach-device "$RUNNING_VM" "$XML_FILE" --live 2>&1 | logger
                     rm -f "$XML_FILE"
                 fi
             fi
         fi
     done
-    
+
     exit 0
 fi
 
 if [ "$ACTION" == "add" ]; then
+    # Check blacklist before doing anything else
+    if check_blacklist "$VENDOR" "$PRODUCT" "$PORT_PATH"; then
+        log_msg "SKIP blacklisted: ${VENDOR}:${PRODUCT} (port:$PORT_PATH)"
+        exit 0
+    fi
+
     sleep 0.5
-    
+
     # Find the new device
     FOUND_DEVICE=""
     MAX_ATTEMPTS=10
     ATTEMPT=0
-    
+
     while [ $ATTEMPT -lt $MAX_ATTEMPTS ] && [ -z "$FOUND_DEVICE" ]; do
         for dev in /sys/bus/usb/devices/*; do
             [ -f "$dev/idVendor" ] || continue
-            
+
             DEV_VENDOR=$(cat "$dev/idVendor" 2>/dev/null)
             DEV_PRODUCT=$(cat "$dev/idProduct" 2>/dev/null)
-            
+
             if [ "$DEV_VENDOR" == "$VENDOR" ] && [ "$DEV_PRODUCT" == "$PRODUCT" ]; then
                 BUSNUM=$(cat "$dev/busnum" 2>/dev/null)
                 DEVNUM=$(cat "$dev/devnum" 2>/dev/null)
-                
+
                 if [ -n "$BUSNUM" ] && [ -n "$DEVNUM" ]; then
                     # Make sure this device isn't already in the VM
                     if ! virsh dumpxml "$RUNNING_VM" 2>/dev/null | grep -q "bus='$BUSNUM' device='$DEVNUM'"; then
@@ -80,7 +111,7 @@ if [ "$ACTION" == "add" ]; then
                 fi
             fi
         done
-        
+
         ATTEMPT=$((ATTEMPT + 1))
         sleep 0.2
     done
@@ -104,15 +135,15 @@ if [ "$ACTION" == "add" ]; then
   </source>
 </hostdev>
 XMLEOF
-    
+
     ATTACH_OUTPUT=$(timeout 5 virsh attach-device "$RUNNING_VM" "$XML_FILE" --live 2>&1)
     ATTACH_RESULT=$?
-    
+
     if [ $ATTACH_RESULT -eq 0 ]; then
         log_msg "SUCCESS: Attached ${VENDOR}:${PRODUCT} (bus:$BUSNUM dev:$DEVNUM)"
     else
         log_msg "FAILED: ${VENDOR}:${PRODUCT} - $ATTACH_OUTPUT"
     fi
-    
+
     rm -f "$XML_FILE"
 fi

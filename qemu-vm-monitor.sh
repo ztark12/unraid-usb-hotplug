@@ -65,7 +65,7 @@ detect_boot_drive() {
                         # Check if already in blacklist
                         ALREADY_BLACKLISTED=false
                         for blacklisted in "${BLACKLIST[@]}"; do
-                            if [ "$BOOT_ID" == "$blacklisted" ]; then
+                            if [ "$BOOT_ID" == "$blacklisted" ] || [[ "$blacklisted" == "${BOOT_ID}@"* ]]; then
                                 ALREADY_BLACKLISTED=true
                                 break
                             fi
@@ -101,7 +101,7 @@ load_blacklist() {
             DEVICE_ID=$(echo "$line" | awk '{print $1}')
 
             # Validate format (XXXX:XXXX)
-            if [[ "$DEVICE_ID" =~ ^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}$ ]]; then
+            if [[ "$DEVICE_ID" =~ ^[0-9a-fA-F]{4}:[0-9a-fA-F]{4}(@[0-9.\-]+)?$ ]]; then
                 BLACKLIST+=("$DEVICE_ID")
                 log_msg "Blacklisted: $DEVICE_ID"
             fi
@@ -141,21 +141,22 @@ attach_usb_devices() {
         [ -z "$VENDOR" ] || [ -z "$PRODUCT" ] || [ -z "$BUSNUM" ] || [ -z "$DEVNUM" ] && continue
         
         DEVICE_ID="${VENDOR}:${PRODUCT}"
+        DEVICE_PORT=$(basename "$usb_device")
         DEVICE_CLASS=$(cat "$usb_device/bDeviceClass" 2>/dev/null)
-        
+
         # Skip hubs (class 09)
         if [ "$DEVICE_CLASS" == "09" ]; then
             log_msg "SKIP hub: $DEVICE_ID (bus:$BUSNUM dev:$DEVNUM)"
             SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
             continue
         fi
-        
-        # Skip blacklist
+
+        # Skip blacklist (global vendor:product or port-specific vendor:product@port)
         SKIP=false
         for blacklisted in "${BLACKLIST[@]}"; do
-            if [ "$DEVICE_ID" == "$blacklisted" ]; then
+            if [ "$DEVICE_ID" == "$blacklisted" ] || [ "${DEVICE_ID}@${DEVICE_PORT}" == "$blacklisted" ]; then
                 SKIP=true
-                log_msg "SKIP blacklisted: $DEVICE_ID (bus:$BUSNUM dev:$DEVNUM)"
+                log_msg "SKIP blacklisted: $DEVICE_ID (port:$DEVICE_PORT bus:$BUSNUM dev:$DEVNUM)"
                 break
             fi
         done
