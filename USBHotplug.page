@@ -82,7 +82,7 @@ function get_all_devices($cfg_file) {
             if (isset($devices[$device_id])) continue; // Skip duplicates
 
             // Get device name from lsusb
-            $lsusb_line = shell_exec("lsusb -d $vendor:$product | head -n1");
+            $lsusb_line = shell_exec("lsusb -d $vendor:$product | head -n1") ?? '';
             preg_match('/: (.+)$/', $lsusb_line, $matches);
             $name = isset($matches[1]) ? trim($matches[1]) : 'Unknown Device';
 
@@ -473,7 +473,7 @@ foreach ($sorted_devices as $device_id => $device) {
         <div class="log-viewer">
 <?php
 if (file_exists($log_file)) {
-    $log_content = shell_exec("tail -n 50 $log_file");
+    $log_content = shell_exec("tail -n 50 $log_file") ?? '';
     echo htmlspecialchars($log_content);
 } else {
     echo "Log file not found or empty.";

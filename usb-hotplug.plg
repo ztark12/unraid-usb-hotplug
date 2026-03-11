@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2025.03.11a">
+<!ENTITY version   "2025.03.11b">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2025.03.11b
+- Fix: Plugin install broken on Unraid 7.2.4 — XML entities are not expanded inside CDATA inline scripts; replaced entity-based tar path with pure shell approach (ls -t | head -1)
+- Fix: Settings page blank on Unraid 7.x (PHP 8.1) — null-safe shell_exec returns for preg_match and htmlspecialchars
+
 ###2025.03.11a
 - Fix: Use exact version in tar extraction to prevent failure when multiple .txz files exist on boot drive (upgrade bug)
 
@@ -82,8 +86,10 @@ Features:
 <FILE Run="/bin/bash">
 <INLINE>
 <![CDATA[
-# Extract plugin files (use exact version to avoid glob expanding to multiple files)
-tar -xf /boot/config/plugins/usb-hotplug/usb-hotplug-&version;.txz -C / --no-same-owner
+# Extract plugin files — use ls -t to get most recently downloaded .txz
+# (entities like &version; are NOT expanded inside CDATA in Unraid 7.x)
+PKG=$(ls -t /boot/config/plugins/usb-hotplug/usb-hotplug-*.txz 2>/dev/null | head -1)
+tar -xf "$PKG" -C / --no-same-owner
 
 # Make scripts executable
 chmod +x /usr/local/sbin/qemu-usb-hotplug.sh
@@ -98,8 +104,8 @@ touch /var/log/usb-hotplug.log
 chmod 644 /var/log/usb-hotplug.log
 
 # Load existing config or create default
-if [ ! -f "&plgPATH;/usb-hotplug.cfg" ]; then
-    cat > "&plgPATH;/usb-hotplug.cfg" << 'EOF'
+if [ ! -f "/boot/config/plugins/usb-hotplug/usb-hotplug.cfg" ]; then
+    cat > "/boot/config/plugins/usb-hotplug/usb-hotplug.cfg" << 'EOF'
 # USB Hotplug Blacklist Configuration
 # Format: VENDOR_ID:PRODUCT_ID  # Description
 
