@@ -2,7 +2,7 @@
 <!DOCTYPE PLUGIN [
 <!ENTITY name      "usb-hotplug">
 <!ENTITY author    "Jesper">
-<!ENTITY version   "2026.03.11c">
+<!ENTITY version   "2026.03.14a">
 <!ENTITY launch    "Settings/USBHotplug">
 <!ENTITY pluginURL "&gitURL;/usb-hotplug.plg">
 <!ENTITY gitURL    "https://raw.githubusercontent.com/ztark12/unraid-usb-hotplug/main">
@@ -15,6 +15,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="6.9.0" support="https://forums.unraid.net/topic/XXXXX-plugin-usb-hotplug/">
 
 <CHANGES>
+###2026.03.14a
+- Fix: Boot drive always added as global blacklist entry even when port-specific entry exists in config
+- Fix: Web UI now saves boot drive as global entry (strips @port) preventing protection loss on port change
+- Fix: Hotplug handler now independently verifies device is not the boot drive before attaching
+
 ###2026.03.11c
 - New: Per-device blacklist using physical USB port path (e.g., 2dc8:301c@1-1.2)
 - New: Identical devices (same vendor:product) now appear as separate rows in the UI, each showing their port path

@@ -34,6 +34,31 @@ check_blacklist() {
     return 1
 }
 
+# Auto-detect boot drive vendor:product via sysfs/mount.
+# Returns "vendor:product" on stdout, or nothing if detection fails.
+detect_boot_drive_id() {
+    local boot_device boot_dev_name usb_dev block block_usb usb_path block_name vendor product
+    boot_device=$(mount | grep " /boot " | awk '{print $1}' | sed 's/[0-9]*$//')
+    [ -z "$boot_device" ] && return
+    boot_dev_name=$(basename "$boot_device")
+    for usb_dev in /sys/bus/usb/devices/*; do
+        [ -f "$usb_dev/idVendor" ] || continue
+        for block in /sys/block/*; do
+            [ -e "$block/device" ] || continue
+            block_usb=$(readlink -f "$block/device" 2>/dev/null)
+            usb_path=$(readlink -f "$usb_dev" 2>/dev/null)
+            if [ -n "$block_usb" ] && [ -n "$usb_path" ] && [[ "$block_usb" == "$usb_path"* ]]; then
+                if [ "$(basename "$block")" == "$boot_dev_name" ]; then
+                    vendor=$(cat "$usb_dev/idVendor" 2>/dev/null)
+                    product=$(cat "$usb_dev/idProduct" 2>/dev/null)
+                    echo "${vendor}:${product}"
+                    return
+                fi
+            fi
+        done
+    done
+}
+
 log_msg "ACTION=$ACTION VENDOR=$VENDOR PRODUCT=$PRODUCT PORT=$PORT_PATH"
 
 RUNNING_VM=$(timeout 3 virsh list --state-running --name 2>/dev/null | head -n 1)
@@ -81,6 +106,14 @@ if [ "$ACTION" == "add" ]; then
     # Check blacklist before doing anything else
     if check_blacklist "$VENDOR" "$PRODUCT" "$PORT_PATH"; then
         log_msg "SKIP blacklisted: ${VENDOR}:${PRODUCT} (port:$PORT_PATH)"
+        exit 0
+    fi
+
+    # SAFETY: independently verify this device is not the boot drive.
+    # Defense-in-depth: catches cases where config has stale/wrong-port entry.
+    BOOT_ID=$(detect_boot_drive_id)
+    if [ -n "$BOOT_ID" ] && [ "${VENDOR}:${PRODUCT}" == "$BOOT_ID" ]; then
+        log_msg "CRITICAL SAFETY BLOCK: ${VENDOR}:${PRODUCT} is the boot drive! Refusing to attach."
         exit 0
     fi
 

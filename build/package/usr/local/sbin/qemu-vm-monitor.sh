@@ -65,7 +65,7 @@ detect_boot_drive() {
                         # Check if already in blacklist
                         ALREADY_BLACKLISTED=false
                         for blacklisted in "${BLACKLIST[@]}"; do
-                            if [ "$BOOT_ID" == "$blacklisted" ] || [[ "$blacklisted" == "${BOOT_ID}@"* ]]; then
+                            if [ "$BOOT_ID" == "$blacklisted" ]; then
                                 ALREADY_BLACKLISTED=true
                                 break
                             fi
