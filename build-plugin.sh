@@ -5,7 +5,7 @@ echo "USB Hotplug Plugin - Build Script"
 echo "========================================="
 echo ""
 
-VERSION="2026.03.14a"
+VERSION="2026.03.27a"
 PLUGIN_NAME="usb-hotplug"
 BUILD_DIR="build"
 PACKAGE_NAME="${PLUGIN_NAME}-${VERSION}"
@@ -111,7 +111,7 @@ if [ "$ACTION" == "remove" ]; then
                 if [ -z "$DEVICE_INFO" ]; then
                     log_msg "Removing stale entry bus:$BUS dev:$DEV"
 
-                    XML_FILE="/tmp/usb-detach-${BUS}-${DEV}-$$.xml"
+                    XML_FILE=$(mktemp /tmp/usb-detach-XXXXXX.xml)
                     cat > "$XML_FILE" << XMLEOF
 <hostdev mode='subsystem' type='usb'>
   <source>
@@ -131,6 +131,12 @@ XMLEOF
 fi
 
 if [ "$ACTION" == "add" ]; then
+    # Fail safe: if the config file is missing we have no blacklist — refuse all attaches.
+    if [ ! -f "$CONFIG_FILE" ]; then
+        log_msg "ERROR: Config file missing ($CONFIG_FILE), refusing attach of ${VENDOR}:${PRODUCT} for safety"
+        exit 1
+    fi
+
     # Check blacklist before doing anything else
     if check_blacklist "$VENDOR" "$PRODUCT" "$PORT_PATH"; then
         log_msg "SKIP blacklisted: ${VENDOR}:${PRODUCT} (port:$PORT_PATH)"
@@ -140,7 +146,9 @@ if [ "$ACTION" == "add" ]; then
     # SAFETY: independently verify this device is not the boot drive.
     # Defense-in-depth: catches cases where config has stale/wrong-port entry.
     BOOT_ID=$(detect_boot_drive_id)
-    if [ -n "$BOOT_ID" ] && [ "${VENDOR}:${PRODUCT}" == "$BOOT_ID" ]; then
+    if [ -z "$BOOT_ID" ]; then
+        log_msg "WARNING: Boot drive detection failed — relying on blacklist only for ${VENDOR}:${PRODUCT}"
+    elif [ "${VENDOR}:${PRODUCT}" == "$BOOT_ID" ]; then
         log_msg "CRITICAL SAFETY BLOCK: ${VENDOR}:${PRODUCT} is the boot drive! Refusing to attach."
         exit 0
     fi
@@ -187,7 +195,7 @@ if [ "$ACTION" == "add" ]; then
 
     log_msg "Attaching ${VENDOR}:${PRODUCT} at bus:$BUSNUM dev:$DEVNUM"
 
-    XML_FILE="/tmp/usb-add-${BUSNUM}-${DEVNUM}-$$.xml"
+    XML_FILE=$(mktemp /tmp/usb-add-XXXXXX.xml)
 
     cat > "$XML_FILE" << XMLEOF
 <hostdev mode='subsystem' type='usb' managed='yes'>
@@ -235,14 +243,6 @@ echo "Copying web UI..."
 # Copy web UI page and AJAX handler
 cp USBHotplug.page "$BUILD_DIR/package/usr/local/emhttp/plugins/$PLUGIN_NAME/"
 cp ajax_handler.php "$BUILD_DIR/package/usr/local/emhttp/plugins/$PLUGIN_NAME/"
-
-# Create default config file (without example line that causes confusion)
-cat > "$BUILD_DIR/package/boot/config/plugins/$PLUGIN_NAME/usb-hotplug.cfg" << 'CONFIG'
-# USB Hotplug Blacklist Configuration
-# Format: VENDOR_ID:PRODUCT_ID  # Description
-
-18a5:0302  # Unraid flash drive
-CONFIG
 
 echo "Creating package..."
 

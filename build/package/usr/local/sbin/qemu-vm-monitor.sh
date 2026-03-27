@@ -203,7 +203,7 @@ attach_usb_devices() {
             [ "$IS_BOOT" = "true" ] && continue
         fi
 
-        XML_FILE="/tmp/usb-startup-${BUSNUM}-${DEVNUM}.xml"
+        XML_FILE=$(mktemp /tmp/usb-startup-XXXXXX.xml)
         
         cat > "$XML_FILE" << XMLEOF
 <hostdev mode='subsystem' type='usb' managed='yes'>
@@ -233,17 +233,16 @@ XMLEOF
     log_msg "Summary: Attached $ATTACHED_COUNT devices, skipped $SKIPPED_COUNT"
 }
 
-# Single-instance lock: prevent multiple monitor instances
+# Single-instance lock: prevent multiple monitor instances (atomic flock)
 PIDFILE="/var/run/usb-hotplug-monitor.pid"
-if [ -f "$PIDFILE" ]; then
-    OLD_PID=$(cat "$PIDFILE" 2>/dev/null)
-    if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-        log_msg "Another instance already running (PID: $OLD_PID), exiting"
-        exit 0
-    fi
+LOCKFILE="/var/run/usb-hotplug-monitor.lock"
+exec 9>"$LOCKFILE"
+if ! flock -n 9; then
+    log_msg "Another instance already running, exiting"
+    exit 0
 fi
 echo $$ > "$PIDFILE"
-trap "rm -f '$PIDFILE'" EXIT
+trap "rm -f '$PIDFILE' '$LOCKFILE'" EXIT
 
 log_msg "VM monitor started (PID: $$)"
 
@@ -264,7 +263,7 @@ load_blacklist
 log_msg "Waiting for libvirt to become ready..."
 LIBVIRT_WAIT=0
 LIBVIRT_TIMEOUT=300
-while ! timeout 3 virsh list --name > /dev/null 2>&1; do
+while ! timeout 3 virsh list --name --state-running > /dev/null 2>&1; do
     sleep 5
     LIBVIRT_WAIT=$((LIBVIRT_WAIT + 5))
     if [ $LIBVIRT_WAIT -ge $LIBVIRT_TIMEOUT ]; then
