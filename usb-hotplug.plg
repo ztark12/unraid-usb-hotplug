@@ -108,6 +108,12 @@ Features:
 # Extract plugin files — use ls -t to get most recently downloaded .txz
 # (entities like &version; are NOT expanded inside CDATA in Unraid 7.x)
 PKG=$(ls -t /boot/config/plugins/usb-hotplug/usb-hotplug-*.txz 2>/dev/null | head -1)
+if [ -z "$PKG" ]; then
+    echo "ERROR: No package file found, aborting install"
+    exit 1
+fi
+# Remove older package versions so they can never be picked on a future boot
+ls /boot/config/plugins/usb-hotplug/usb-hotplug-*.txz 2>/dev/null | grep -vF "$PKG" | xargs rm -f 2>/dev/null
 tar -xf "$PKG" -C / --no-same-owner
 
 # Make scripts executable
